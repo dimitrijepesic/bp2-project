@@ -1,5 +1,8 @@
+import dataclasses
+
 import pytest
 
+from src.sqlparser.query_ast import AttrRef, Condition, Disjunction, Literal, Query
 from src.sqlparser.tokenizer import ParseError, TokenKind, tokenize
 
 # ---------------------------------------------------------------------------
@@ -124,3 +127,71 @@ def test_invalid_number_trailing_dot():
 def test_invalid_number_double_decimal_point():
     with pytest.raises(ParseError):
         tokenize("1.2.3")
+
+
+# ---------------------------------------------------------------------------
+# AST čvorovi
+# ---------------------------------------------------------------------------
+
+
+def test_ast_value_equality():
+    q1 = Query(
+        select=(AttrRef("ime"),),
+        tables=("Student",),
+        where=(Condition(AttrRef("prosek"), ">", Literal(8.5, "number")),),
+        order_by=AttrRef("ime", "Student"),
+    )
+    q2 = Query(
+        select=(AttrRef("ime"),),
+        tables=("Student",),
+        where=(Condition(AttrRef("prosek"), ">", Literal(8.5, "number")),),
+        order_by=AttrRef("ime", "Student"),
+    )
+    assert q1 == q2
+
+
+def test_ast_nodes_are_frozen():
+    attr = AttrRef("ime")
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        attr.name = "prezime"
+
+
+def test_query_defaults_no_where_no_order_by():
+    q = Query(select=(AttrRef("ime"),), tables=("Student",))
+    assert q.where == ()
+    assert q.order_by is None
+
+
+def test_condition_right_side_can_be_attr_or_literal():
+    join = Condition(AttrRef("id", "Student"), "=", AttrRef("studentId", "Ispit"))
+    sel = Condition(AttrRef("smer"), "=", Literal("RTI", "string"))
+    assert isinstance(join.right, AttrRef)
+    assert isinstance(sel.right, Literal)
+
+
+def test_condition_invalid_op_rejected():
+    with pytest.raises(ValueError):
+        Condition(AttrRef("a"), "!=", Literal(1, "number"))
+
+
+def test_literal_invalid_kind_and_mismatched_value_rejected():
+    with pytest.raises(ValueError):
+        Literal(1, "bool")
+    with pytest.raises(ValueError):
+        Literal("RTI", "number")
+    with pytest.raises(ValueError):
+        Literal(True, "number")
+    with pytest.raises(ValueError):
+        Literal(5, "string")
+
+
+def test_empty_disjunction_rejected():
+    with pytest.raises(ValueError):
+        Disjunction(())
+
+
+def test_query_empty_select_or_tables_rejected():
+    with pytest.raises(ValueError):
+        Query(select=(), tables=("Student",))
+    with pytest.raises(ValueError):
+        Query(select=(AttrRef("ime"),), tables=())
