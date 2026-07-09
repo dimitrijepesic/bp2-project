@@ -1,9 +1,13 @@
 import dataclasses
+from pathlib import Path
 
 import pytest
 
+from src.sqlparser.parser import parse
 from src.sqlparser.query_ast import AttrRef, Condition, Disjunction, Literal, Query
 from src.sqlparser.tokenizer import ParseError, TokenKind, tokenize
+
+UPITI_DIR = Path("tests/fixtures/upiti")
 
 # ---------------------------------------------------------------------------
 # Tokenizer
@@ -195,3 +199,164 @@ def test_query_empty_select_or_tables_rejected():
         Query(select=(), tables=("Student",))
     with pytest.raises(ValueError):
         Query(select=(AttrRef("ime"),), tables=())
+
+
+# ---------------------------------------------------------------------------
+# Parser — validni upiti
+# ---------------------------------------------------------------------------
+
+
+def test_parse_minimal_query():
+    q = parse("SELECT ime FROM Student")
+    assert q == Query(select=(AttrRef("ime"),), tables=("Student",))
+
+
+def test_parse_full_query_ast_equality():
+    q = parse(
+        "SELECT Student.ime, prosek FROM Student, Ispit "
+        "WHERE Student.indeks = Ispit.studentIndeks AND prosek > 8.5 "
+        "AND (ocena = 9 OR ocena = 10) ORDER BY Student.prosek;"
+    )
+    assert q == Query(
+        select=(AttrRef("ime", "Student"), AttrRef("prosek")),
+        tables=("Student", "Ispit"),
+        where=(
+            Condition(AttrRef("indeks", "Student"), "=", AttrRef("studentIndeks", "Ispit")),
+            Condition(AttrRef("prosek"), ">", Literal(8.5, "number")),
+            Disjunction((
+                Condition(AttrRef("ocena"), "=", Literal(9, "number")),
+                Condition(AttrRef("ocena"), "=", Literal(10, "number")),
+            )),
+        ),
+        order_by=AttrRef("prosek", "Student"),
+    )
+
+
+def test_singleton_parenthesized_condition_normalized_to_condition():
+    q = parse("SELECT a FROM T WHERE (b = 2)")
+    assert q.where == (Condition(AttrRef("b"), "=", Literal(2, "number")),)
+    assert not isinstance(q.where[0], Disjunction)
+
+
+def test_number_literal_int_vs_float():
+    q = parse("SELECT a FROM T WHERE b = 2 AND c = 2.5")
+    assert isinstance(q.where[0].right.value, int)
+    assert q.where[0].right.value == 2
+    assert isinstance(q.where[1].right.value, float)
+    assert q.where[1].right.value == 2.5
+
+
+def test_string_literal_condition():
+    q = parse("SELECT ime FROM Student WHERE smer = 'RTI'")
+    assert q.where == (Condition(AttrRef("smer"), "=", Literal("RTI", "string")),)
+
+
+def test_semicolon_is_optional():
+    assert parse("SELECT a FROM T") == parse("SELECT a FROM T;")
+
+
+def test_disjunction_counts_as_one_condition():
+    # 5 prostih + cela zagrada = 6 clanova — mora da prodje
+    q = parse(
+        "SELECT a FROM T WHERE a=1 AND b=2 AND c=3 AND d=4 AND e=5 "
+        "AND (f=6 OR f=7)"
+    )
+    assert len(q.where) == 6
+    assert isinstance(q.where[5], Disjunction)
+
+
+# ---------------------------------------------------------------------------
+# Parser — greske
+# ---------------------------------------------------------------------------
+
+
+def test_missing_from_raises_with_position():
+    with pytest.raises(ParseError) as e:
+        parse("SELECT ime Student")
+    assert "expected FROM" in str(e.value)
+    assert "position 12" in str(e.value)
+    assert "IDENT 'Student'" in str(e.value)
+
+
+def test_or_outside_parentheses_rejected():
+    with pytest.raises(ParseError) as e:
+        parse("SELECT ime FROM Student WHERE smer = 'RTI' OR smer = 'SI'")
+    assert "expected end of query" in str(e.value)
+    assert "KEYWORD 'OR'" in str(e.value)
+
+
+def test_attr_right_side_inside_parentheses_rejected():
+    with pytest.raises(ParseError) as e:
+        parse("SELECT a FROM T WHERE (b = c OR d = 1)")
+    assert "expected literal" in str(e.value)
+
+
+def test_invalid_operator_sequence_rejected():
+    with pytest.raises(ParseError) as e:
+        parse("SELECT a FROM T WHERE b <> 2")
+    assert "got OP '>'" in str(e.value)
+
+
+def test_five_tables_rejected():
+    with pytest.raises(ParseError) as e:
+        parse("SELECT a FROM T1, T2, T3, T4, T5")
+    assert "at most 4 tables" in str(e.value)
+    assert "got 5" in str(e.value)
+
+
+def test_seven_conditions_rejected():
+    with pytest.raises(ParseError) as e:
+        parse("SELECT a FROM T WHERE a=1 AND b=2 AND c=3 AND d=4 AND e=5 AND f=6 AND g=7")
+    assert "at most 6 WHERE conditions" in str(e.value)
+    assert "got 7" in str(e.value)
+
+
+def test_trailing_tokens_after_semicolon_rejected():
+    with pytest.raises(ParseError) as e:
+        parse("SELECT a FROM T; SELECT")
+    assert "expected end of query" in str(e.value)
+
+
+def test_empty_where_rejected():
+    with pytest.raises(ParseError):
+        parse("SELECT a FROM T WHERE")
+    with pytest.raises(ParseError):
+        parse("SELECT a FROM T WHERE ORDER BY a")
+
+
+def test_order_without_by_rejected():
+    with pytest.raises(ParseError) as e:
+        parse("SELECT a FROM T ORDER a")
+    assert "expected BY" in str(e.value)
+
+
+def test_trailing_comma_in_select_rejected():
+    with pytest.raises(ParseError):
+        parse("SELECT a, FROM T")
+
+
+def test_unclosed_parenthesis_rejected():
+    with pytest.raises(ParseError) as e:
+        parse("SELECT a FROM T WHERE (b = 2 OR c = 3")
+    assert "')'" in str(e.value)
+
+
+# ---------------------------------------------------------------------------
+# Golden-ish: fixture upiti
+# ---------------------------------------------------------------------------
+
+
+def test_valid_fixture_queries_parse():
+    files = sorted(UPITI_DIR.glob("q*.sql"))
+    assert len(files) == 4, f"expected 4 valid fixtures, found {[f.name for f in files]}"
+    for f in files:
+        q = parse(f.read_text(encoding="utf-8"))
+        assert isinstance(q, Query), f.name
+
+
+def test_invalid_fixture_queries_raise():
+    files = sorted(UPITI_DIR.glob("bad_*.sql"))
+    assert len(files) == 4, f"expected 4 bad fixtures, found {[f.name for f in files]}"
+    for f in files:
+        with pytest.raises(ParseError):
+            parse(f.read_text(encoding="utf-8"))
