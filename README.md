@@ -1,15 +1,40 @@
+# BP2 — Mini optimizator SQL upita
 
+Projekat za predmet Baze podataka 2. Ulaz: SQL upit + JSON katalog šeme sa
+statistikama. Izlaz: najbolji plan evaluacije (materijalizacijom) sa cenom u
+blok transferima po operaciji. Formule cene: Silberschatz pogl. 15-16,
+predavanja BP2 5 i 6.
 
-## Index matcher
+Python, bez zavisnosti — samo pytest za testove.
 
-**Modul:** `src/cost/index_matcher.py`
+## Pokretanje testova
 
-Odlučuje da li se indeks može iskoristiti za date selekcione uslove. Cost modeli selekcije ga zovu za svaki indeks tabele; vraća pokrivene uslove, preostale (za proveru nad dohvaćenim redovima) i da li je poslednji pokriveni uslov opseg ili `None` ako je indeks neupotrebljiv.
+```
+pytest tests/ -v
+```
 
-**B+ stablo: prefix pravilo:** uslovi moraju pokrivati neprekidan prefiks atributa indeksa; svi pre poslednjeg jednakošću, poslednji sme i poređenjem (poređenje prekida dalji match). Uslov van prefiksa ne kvari match, ide u preostale.
+Trenutno: 72 testa.
 
-**Heš: potpuno poklapanje:** jednakost na svim atributima indeksa, poređenja se ne podržavaju.
+## Urađeno do sad
 
-**Pretpostavke:** više uslova na isti atribut -> jedan ulazi u match, ostali u preostale; prazna lista uslova → `None`; operatori: `=`, `<`, `>`, `<=`, `>=`.
+- **Katalog** (`src/catalog/`) — model šeme (frozen dataclass) i JSON loader sa
+  8 validacija (konzistentnost broja blokova, distinct/unique, indeksi...).
+- **Index matcher** (`src/cost/index_matcher.py`) — odlučuje da li indeks
+  pokriva date selekcione uslove: B+ stablo po prefix pravilu (jednakosti,
+  poslednji uslov sme biti opseg), heš samo potpuno poklapanje jednakostima.
+  Vraća pokrivene i preostale uslove.
+- **SQL parser** (`src/sqlparser/`) — tokenizer (pozicije u porukama grešaka),
+  frozen AST i recursive descent parser za podskup SQL-a:
+  `SELECT ... FROM ... [WHERE ...] [ORDER BY ...]`, do 4 tabele i 6 uslova u
+  WHERE, disjunkcija samo u zagradama kao član konjunkcije.
 
-Reference: Silberschatz pogl. 15.3 (A8), predavanja BP2 4 i 5.
+## Sledeće
+
+- Semantička analiza (razrešavanje imena, selekcija vs join, provera tipova)
+- Cost modeli (selekcija, join, sortiranje)
+- Optimizator (nabrajanje planova) i ispis plana
+
+## Primer ulaza
+
+Katalog: `tests/fixtures/primer_ulaza.json` (4 tabele, bufferBlocks=10).
+Upiti: `tests/fixtures/upiti/*.sql` (validni `q*.sql`, nevalidni `bad_*.sql`).
