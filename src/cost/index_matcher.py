@@ -71,8 +71,12 @@ def match_btree(index: Index, conditions: tuple[SimpleCondition,...]) -> IndexMa
         break
 
     if not covered:
-        return None
-    
+        # ne-prefiks poklapanje jednog atributa kompozitnog indeksa, odstupanje
+        # od strogog prefiks pravila iz silberschatz-a: profesor u resenju
+        # roka 2025 koristi klaster b+ (IdOso, IdAut) za pretragu samo po IdAut,
+        # sa cenom kao da je indeks nad tim atributom
+        return _match_btree_single_attribute(index, conditions)
+
     residual = tuple(
         condition
         for pos, condition in enumerate(conditions)
@@ -85,6 +89,27 @@ def match_btree(index: Index, conditions: tuple[SimpleCondition,...]) -> IndexMa
         remaining = residual,
         last_is_range = last_is_range,
     )
+
+def _match_btree_single_attribute(index: Index, conditions: tuple[SimpleCondition,...]) -> IndexMatch | None:
+    # jednakost ima prednost nad opsegom, redosled atributa indeksa je redosled provere
+    for operator_kind in ("equality", "range"):
+        for index_attribute in index.attributes:
+            if operator_kind == "equality":
+                found = find_condition(conditions, index_attribute, operator="=", excluded=set())
+            else:
+                found = find_range_condition(conditions, index_attribute, excluded=set())
+            if found is None:
+                continue
+            pos, condition = found
+            residual = tuple(c for p, c in enumerate(conditions) if p != pos)
+            return IndexMatch(
+                index=index,
+                matched=(condition,),
+                remaining=residual,
+                last_is_range=(operator_kind == "range"),
+            )
+    return None
+
 
 def match_hash(index: Index, conditions: tuple[SimpleCondition,...]) -> IndexMatch | None:
     used_indexes: set[int] = set()
