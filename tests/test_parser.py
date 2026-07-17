@@ -4,13 +4,13 @@ from pathlib import Path
 import pytest
 
 from src.sqlparser.parser import parse
-from src.sqlparser.query_ast import AttrRef, Condition, Disjunction, Literal, Query
+from src.sqlparser.query_ast import AttrRef, Condition, Literal, Query, TableRef
 from src.sqlparser.tokenizer import ParseError, TokenKind, tokenize
 
 UPITI_DIR = Path("tests/fixtures/upiti")
 
 # ---------------------------------------------------------------------------
-# Tokenizer
+# tokenizer
 # ---------------------------------------------------------------------------
 
 
@@ -84,13 +84,12 @@ def test_string_literal_content_without_quotes():
     assert texts(tokens)[:-1] == ["RTI", ""]
 
 
-def test_parenthesized_disjunction():
-    tokens = tokenize("(b=2 OR c=3)")
-    assert kinds(tokens) == [
-        TokenKind.LPAREN, TokenKind.IDENT, TokenKind.OP, TokenKind.NUMBER,
-        TokenKind.KEYWORD, TokenKind.IDENT, TokenKind.OP, TokenKind.NUMBER,
-        TokenKind.RPAREN, TokenKind.EOF,
-    ]
+def test_parentheses_rejected_by_tokenizer():
+    # '(' i ')' nisu deo jezika, tokenizer ih odbija
+    for sql in ("(b=2 OR c=3)", "SELECT a FROM T WHERE (b = 2)"):
+        with pytest.raises(ParseError) as e:
+            tokenize(sql)
+        assert "unexpected character" in str(e.value)
 
 
 def test_token_positions_are_one_based():
@@ -133,21 +132,29 @@ def test_invalid_number_double_decimal_point():
         tokenize("1.2.3")
 
 
+def test_star_token():
+    tokens = tokenize("SELECT * FROM Student")
+    assert kinds(tokens) == [
+        TokenKind.KEYWORD, TokenKind.STAR, TokenKind.KEYWORD,
+        TokenKind.IDENT, TokenKind.EOF,
+    ]
+
+
 # ---------------------------------------------------------------------------
-# AST čvorovi
+# AST cvorovi
 # ---------------------------------------------------------------------------
 
 
 def test_ast_value_equality():
     q1 = Query(
         select=(AttrRef("ime"),),
-        tables=("Student",),
+        tables=(TableRef("Student"),),
         where=(Condition(AttrRef("prosek"), ">", Literal(8.5, "number")),),
         order_by=AttrRef("ime", "Student"),
     )
     q2 = Query(
         select=(AttrRef("ime"),),
-        tables=("Student",),
+        tables=(TableRef("Student"),),
         where=(Condition(AttrRef("prosek"), ">", Literal(8.5, "number")),),
         order_by=AttrRef("ime", "Student"),
     )
@@ -161,7 +168,7 @@ def test_ast_nodes_are_frozen():
 
 
 def test_query_defaults_no_where_no_order_by():
-    q = Query(select=(AttrRef("ime"),), tables=("Student",))
+    q = Query(select=(AttrRef("ime"),), tables=(TableRef("Student"),))
     assert q.where == ()
     assert q.order_by is None
 
@@ -189,53 +196,50 @@ def test_literal_invalid_kind_and_mismatched_value_rejected():
         Literal(5, "string")
 
 
-def test_empty_disjunction_rejected():
-    with pytest.raises(ValueError):
-        Disjunction(())
-
-
 def test_query_empty_select_or_tables_rejected():
     with pytest.raises(ValueError):
-        Query(select=(), tables=("Student",))
+        Query(select=(), tables=(TableRef("Student"),))
     with pytest.raises(ValueError):
         Query(select=(AttrRef("ime"),), tables=())
 
 
+def test_table_ref_alias_same_as_name_rejected():
+    with pytest.raises(ValueError):
+        TableRef("Student", alias="Student")
+
+
 # ---------------------------------------------------------------------------
-# Parser — validni upiti
+# parser: validni upiti
 # ---------------------------------------------------------------------------
 
 
 def test_parse_minimal_query():
     q = parse("SELECT ime FROM Student")
-    assert q == Query(select=(AttrRef("ime"),), tables=("Student",))
+    assert q == Query(select=(AttrRef("ime"),), tables=(TableRef("Student"),))
 
 
 def test_parse_full_query_ast_equality():
     q = parse(
         "SELECT Student.ime, prosek FROM Student, Ispit "
         "WHERE Student.indeks = Ispit.studentIndeks AND prosek > 8.5 "
-        "AND (ocena = 9 OR ocena = 10) ORDER BY Student.prosek;"
+        "AND ocena >= 9 ORDER BY Student.prosek;"
     )
     assert q == Query(
         select=(AttrRef("ime", "Student"), AttrRef("prosek")),
-        tables=("Student", "Ispit"),
+        tables=(TableRef("Student"), TableRef("Ispit")),
         where=(
             Condition(AttrRef("indeks", "Student"), "=", AttrRef("studentIndeks", "Ispit")),
             Condition(AttrRef("prosek"), ">", Literal(8.5, "number")),
-            Disjunction((
-                Condition(AttrRef("ocena"), "=", Literal(9, "number")),
-                Condition(AttrRef("ocena"), "=", Literal(10, "number")),
-            )),
+            Condition(AttrRef("ocena"), ">=", Literal(9, "number")),
         ),
         order_by=AttrRef("prosek", "Student"),
     )
 
 
-def test_singleton_parenthesized_condition_normalized_to_condition():
-    q = parse("SELECT a FROM T WHERE (b = 2)")
-    assert q.where == (Condition(AttrRef("b"), "=", Literal(2, "number")),)
-    assert not isinstance(q.where[0], Disjunction)
+def test_parenthesized_condition_rejected():
+    # zagrade oko uslova nisu podrzane
+    with pytest.raises(ParseError):
+        parse("SELECT a FROM T WHERE (b = 2)")
 
 
 def test_number_literal_int_vs_float():
@@ -255,18 +259,53 @@ def test_semicolon_is_optional():
     assert parse("SELECT a FROM T") == parse("SELECT a FROM T;")
 
 
-def test_disjunction_counts_as_one_condition():
-    # 5 prostih + cela zagrada = 6 clanova — mora da prodje
+def test_select_star():
+    q = parse("SELECT * FROM Student WHERE prosek > 8 ORDER BY ime")
+    assert q.select_star is True
+    assert q.select == ()
+    assert q.tables == (TableRef("Student"),)
+
+
+def test_select_star_multiple_tables():
+    q = parse("SELECT * FROM Student, Ispit")
+    assert q.select_star is True
+    assert q.tables == (TableRef("Student"), TableRef("Ispit"))
+
+
+def test_parse_table_alias():
+    q = parse("SELECT s.ime FROM Student s")
+    assert q.tables == (TableRef("Student", alias="s"),)
+    assert q.select == (AttrRef("ime", "s"),)  # kvalifikator ostaje alijas, resava ga semantika
+
+
+def test_parse_aliases_mixed_with_plain_tables():
+    q = parse("SELECT s.ime FROM Student s, Ispit WHERE s.indeks = studentIndeks")
+    assert q.tables == (TableRef("Student", alias="s"), TableRef("Ispit"))
+
+
+def test_parse_alias_in_where_and_order_by():
+    q = parse("SELECT s.ime FROM Student s WHERE s.prosek > 8.5 ORDER BY s.ime")
+    assert q.where == (Condition(AttrRef("prosek", "s"), ">", Literal(8.5, "number")),)
+    assert q.order_by == AttrRef("ime", "s")
+
+
+def test_parse_alias_same_as_table_name_rejected():
+    with pytest.raises(ParseError) as e:
+        parse("SELECT ime FROM Student Student")
+    assert "alias must differ" in str(e.value)
+
+
+def test_six_conjunctive_conditions_accepted():
+    # najvise sto sme: tacno 6 AND uslova u WHERE konjunkciji
     q = parse(
-        "SELECT a FROM T WHERE a=1 AND b=2 AND c=3 AND d=4 AND e=5 "
-        "AND (f=6 OR f=7)"
+        "SELECT a FROM T WHERE a=1 AND b=2 AND c=3 AND d=4 AND e=5 AND f=6"
     )
     assert len(q.where) == 6
-    assert isinstance(q.where[5], Disjunction)
+    assert all(isinstance(c, Condition) for c in q.where)
 
 
 # ---------------------------------------------------------------------------
-# Parser — greske
+# parser: greske
 # ---------------------------------------------------------------------------
 
 
@@ -278,17 +317,13 @@ def test_missing_from_raises_with_position():
     assert "IDENT 'Student'" in str(e.value)
 
 
-def test_or_outside_parentheses_rejected():
+def test_or_rejected_with_targeted_message():
+    # disjunkcija je van obima, WHERE mora biti konjunkcija
     with pytest.raises(ParseError) as e:
         parse("SELECT ime FROM Student WHERE smer = 'RTI' OR smer = 'SI'")
-    assert "expected end of query" in str(e.value)
-    assert "KEYWORD 'OR'" in str(e.value)
-
-
-def test_attr_right_side_inside_parentheses_rejected():
-    with pytest.raises(ParseError) as e:
-        parse("SELECT a FROM T WHERE (b = c OR d = 1)")
-    assert "expected literal" in str(e.value)
+    assert "OR is not supported" in str(e.value)
+    assert "conjunction" in str(e.value)
+    assert "position 44" in str(e.value)
 
 
 def test_invalid_operator_sequence_rejected():
@@ -335,14 +370,80 @@ def test_trailing_comma_in_select_rejected():
         parse("SELECT a, FROM T")
 
 
-def test_unclosed_parenthesis_rejected():
-    with pytest.raises(ParseError) as e:
-        parse("SELECT a FROM T WHERE (b = 2 OR c = 3")
-    assert "')'" in str(e.value)
+def test_star_mixed_with_attrs_rejected():
+    # * je ili sama u SELECT listi ili je nema
+    with pytest.raises(ParseError):
+        parse("SELECT *, ime FROM Student")
+    with pytest.raises(ParseError):
+        parse("SELECT ime, * FROM Student")
+
+
+def test_star_outside_select_rejected():
+    with pytest.raises(ParseError):
+        parse("SELECT a FROM T WHERE b = *")
 
 
 # ---------------------------------------------------------------------------
-# Golden-ish: fixture upiti
+# van obima postavke: forme koje se odbijaju
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("sql", [
+    "SELECT COUNT(a) FROM T",                        # agregacija
+    "SELECT SUM(a) FROM T",                          # agregacija
+    "SELECT a FROM T GROUP BY a",                    # GROUP BY
+    "SELECT a FROM T GROUP BY a HAVING b = 1",       # HAVING
+    "SELECT DISTINCT a FROM T",                      # DISTINCT
+    "SELECT a FROM T JOIN U ON a = b",               # JOIN ... ON
+    "SELECT a FROM T UNION SELECT b FROM U",         # skupovna operacija
+    "SELECT a FROM T INTERSECT SELECT b FROM U",     # skupovna operacija
+    "SELECT a FROM T EXCEPT SELECT b FROM U",        # skupovna operacija
+    "SELECT a FROM (SELECT b FROM U)",               # podupit
+])
+def test_out_of_scope_sql_forms_rejected(sql):
+    with pytest.raises(ParseError):
+        parse(sql)
+
+
+# ---------------------------------------------------------------------------
+# numericki literali: konacnost
+# ---------------------------------------------------------------------------
+
+
+def test_normal_numeric_literals_still_parse():
+    q = parse("SELECT a FROM T WHERE b = 42 AND c = 8.5")
+    assert q.where[0].right.value == 42
+    assert q.where[1].right.value == 8.5
+
+
+def test_huge_decimal_literal_rejected_as_not_finite():
+    # float('9'*400 + '.5') ode u inf, hocemo ParseError a ne inf u AST-u
+    with pytest.raises(ParseError) as e:
+        parse("SELECT a FROM T WHERE b = " + "9" * 400 + ".5")
+    assert "not finite" in str(e.value)
+    assert "position 27" in str(e.value)
+
+
+def test_largest_finite_decimal_literal_accepted():
+    q = parse("SELECT a FROM T WHERE b = 1" + "0" * 308 + ".0")  # 1e308 < float max
+    assert q.where[0].right.value == 1e308
+
+
+def test_huge_integer_literal_stays_exact_int():
+    q = parse("SELECT a FROM T WHERE b = " + "9" * 400)
+    value = q.where[0].right.value
+    assert isinstance(value, int)
+    assert value == int("9" * 400)
+
+
+def test_tiny_decimal_underflows_to_zero_by_convention():
+    # underflow ka 0.0 se prihvata, takva je konvencija
+    q = parse("SELECT a FROM T WHERE b = 0." + "0" * 400 + "1")
+    assert q.where[0].right.value == 0.0
+
+
+# ---------------------------------------------------------------------------
+# golden-ish: fixture upiti
 # ---------------------------------------------------------------------------
 
 

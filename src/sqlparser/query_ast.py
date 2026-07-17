@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
-# AST verno beleži šta piše u upitu — klasifikaciju uslova (selekcija vs join)
-# i razrešavanje imena radi semantika, ne parser.
+# ast verno belezi sta pise u upitu; klasifikaciju uslova (selekcija vs join)
+# i razresavanje imena radi semantika, ne parser
 
 COMPARISON_OPS = {"=", "<", ">", "<=", ">="}
 LITERAL_KINDS = {"number", "string"}
@@ -10,13 +10,23 @@ LITERAL_KINDS = {"number", "string"}
 @dataclass(frozen=True)
 class AttrRef:
     name: str
-    table: str | None = None  # kvalifikator iz upita (Student.ime); None ako nije pisan
+    table: str | None = None  # kvalifikator iz upita (Student.ime ili alijas s.ime); None ako nije pisan
+
+
+@dataclass(frozen=True)
+class TableRef:
+    name: str
+    alias: str | None = None  # FROM Student s: alijas sakriva ime tabele kao kvalifikator
+
+    def __post_init__(self):
+        if self.alias == self.name:
+            raise ValueError(f"alias must differ from table name, got {self.name!r}")
 
 
 @dataclass(frozen=True)
 class Literal:
     value: object  # int | float za number, str za string
-    kind: str      # "number" | "string" — semantika koristi za proveru tipova
+    kind: str      # "number" ili "string", semantika koristi za proveru tipova
 
     def __post_init__(self):
         if self.kind not in LITERAL_KINDS:
@@ -49,24 +59,17 @@ class Condition:
 
 
 @dataclass(frozen=True)
-class Disjunction:
-    # samo poređenja unutar zagrada — po gramatici tu nema ugnježdene konjunkcije
-    conditions: tuple[Condition, ...]
-
-    def __post_init__(self):
-        if not self.conditions:
-            raise ValueError("disjunction must have at least one condition")
-
-
-@dataclass(frozen=True)
 class Query:
     select: tuple[AttrRef, ...]
-    tables: tuple[str, ...]
-    where: "tuple[Condition | Disjunction, ...]" = ()  # implicitna konjunkcija članova
+    tables: tuple[TableRef, ...]
+    where: tuple[Condition, ...] = ()  # where je konjunkcija, clanovi vezani sa AND
     order_by: AttrRef | None = None
+    select_star: bool = False  # kod SELECT * je select lista prazna, siri je semantika
 
     def __post_init__(self):
-        if not self.select:
+        if self.select_star and self.select:
+            raise ValueError("SELECT * query must not also list attributes")
+        if not self.select_star and not self.select:
             raise ValueError("query must select at least one attribute")
         if not self.tables:
             raise ValueError("query must reference at least one table")

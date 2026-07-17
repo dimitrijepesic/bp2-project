@@ -3,7 +3,7 @@ from enum import Enum
 
 
 class ParseError(Exception):
-    """Greska u tokenizaciji/parsiranju SQL upita (koristi je ceo sqlparser paket)."""
+    """greska u tokenizaciji/parsiranju sql upita (koristi je ceo sqlparser paket)"""
 
 
 class TokenKind(Enum):
@@ -12,21 +12,23 @@ class TokenKind(Enum):
     NUMBER = "NUMBER"
     STRING = "STRING"
     OP = "OP"
+    STAR = "STAR"
     COMMA = "COMMA"
     DOT = "DOT"
-    LPAREN = "LPAREN"
-    RPAREN = "RPAREN"
     SEMICOLON = "SEMICOLON"
     EOF = "EOF"
 
 
+# OR je rezervisan iako disjunkcija nije podrzana (where je po postavci
+# konjunkcija): kao keyword daje odbijanje sa jasnom porukom umesto da se
+# 'OR' tiho prihvati kao identifikator/alijas tabele
 KEYWORDS = {"SELECT", "FROM", "WHERE", "AND", "OR", "ORDER", "BY"}
 
+# zagrade nisu deo gramatike, '(' i ')' padaju na "unexpected character"
 PUNCT = {
+    "*": TokenKind.STAR,
     ",": TokenKind.COMMA,
     ".": TokenKind.DOT,
-    "(": TokenKind.LPAREN,
-    ")": TokenKind.RPAREN,
     ";": TokenKind.SEMICOLON,
 }
 
@@ -42,7 +44,7 @@ def _error(msg: str, pos: int):
     raise ParseError(f"tokenizer: {msg} at position {pos}")
 
 
-# eksplicitno ASCII (isalpha/isdigit bi propustili unicode)
+# eksplicitno ascii (isalpha/isdigit bi propustili unicode)
 def _is_digit(c: str) -> bool:
     return "0" <= c <= "9"
 
