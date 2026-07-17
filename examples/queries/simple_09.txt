@@ -1,0 +1,1 @@
+SELECT ime FROM Student WHERE smer = 'SIIT' AND prosek >= 9.0

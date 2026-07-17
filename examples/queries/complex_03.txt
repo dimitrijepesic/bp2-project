@@ -1,0 +1,1 @@
+SELECT p.naziv, i.ocena FROM Ispit i, Predmet p WHERE i.predmetId = p.predmetId AND p.katedra = 'Informatika'

@@ -1,0 +1,1 @@
+SELECT datum FROM Ispit WHERE predmetId = 5 AND ocena = 9

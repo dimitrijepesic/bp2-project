@@ -1,0 +1,1 @@
+SELECT ime, smer FROM Student ORDER BY indeks

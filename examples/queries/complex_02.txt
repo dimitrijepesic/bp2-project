@@ -1,0 +1,1 @@
+SELECT s.ime, i.ocena, i.datum FROM Student s, Ispit i WHERE s.indeks = i.studentIndeks AND i.ocena >= 9 ORDER BY i.datum

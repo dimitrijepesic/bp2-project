@@ -1,0 +1,1 @@
+SELECT ispitId, ocena FROM Ispit WHERE ocena = 10

@@ -1,0 +1,1 @@
+SELECT s.ime, p.naziv FROM Student s, Ispit i, Predmet p WHERE s.indeks = i.studentIndeks AND i.predmetId = p.predmetId AND p.espb >= 6 ORDER BY p.naziv

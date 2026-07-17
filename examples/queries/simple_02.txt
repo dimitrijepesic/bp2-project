@@ -1,0 +1,1 @@
+SELECT ime, prosek FROM Student WHERE indeks = 'RA-42-2021'

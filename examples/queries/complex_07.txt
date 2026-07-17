@@ -1,0 +1,1 @@
+SELECT s.ime, st.tip FROM Student s, Ispit i, Stipendija st WHERE s.indeks = i.studentIndeks AND s.indeks = st.studentIndeks AND i.ocena = 10

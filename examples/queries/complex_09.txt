@@ -1,0 +1,1 @@
+SELECT s.ime, p.naziv, st.iznos FROM Student s, Ispit i, Predmet p, Stipendija st WHERE s.indeks = i.studentIndeks AND i.predmetId = p.predmetId AND s.indeks = st.studentIndeks AND p.espb >= 6 AND s.prosek >= 8.5 ORDER BY s.ime

@@ -1,0 +1,1 @@
+SELECT naziv FROM Predmet WHERE katedra = 'Matematika'

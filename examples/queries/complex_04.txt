@@ -1,0 +1,1 @@
+SELECT s.ime, st.iznos FROM Student s, Stipendija st WHERE s.indeks = st.studentIndeks AND st.iznos > 20000

@@ -1,0 +1,1 @@
+SELECT s.ime, s.smer, p.naziv, st.tip FROM Student s, Ispit i, Predmet p, Stipendija st WHERE s.indeks = i.studentIndeks AND i.predmetId = p.predmetId AND s.indeks = st.studentIndeks AND s.godinaUpisa >= 2020 AND i.ocena >= 7 AND st.iznos <= 15000

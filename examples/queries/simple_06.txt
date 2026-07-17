@@ -1,0 +1,1 @@
+SELECT tip, iznos FROM Stipendija WHERE tip = 'drzavna'

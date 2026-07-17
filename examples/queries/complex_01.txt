@@ -1,0 +1,1 @@
+SELECT s.ime, i.ocena FROM Student s, Ispit i WHERE s.indeks = i.studentIndeks
