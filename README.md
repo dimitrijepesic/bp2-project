@@ -1,6 +1,6 @@
-# BP2 - mini SQL query optimizer
+# Mini SQL query optimizer
 
-Course project for Databases 2. Input: a SQL query and a JSON catalog with
+Input: a SQL query and a JSON catalog with
 schema statistics. Output: the cheapest evaluation plan, printed as an
 operation tree with the chosen algorithm and cost (in block transfers) per
 operation.
