@@ -1,0 +1,48 @@
+{
+  "bufferBlocks": 30,
+  "schema": {
+    "tables": [
+      {
+        "name": "Utakmica",
+        "rowCount": 10000,
+        "blockCount": 250,
+        "rowsPerBlock": 40,
+        "attributes": [
+          {"name": "IDUta", "type": "INT", "unique": true, "distinctValues": 10000},
+          {"name": "Datum", "type": "DATE", "unique": false, "distinctValues": 2000}
+        ],
+        "indexes": [
+          {"name": "idx_utakmica_datum", "attributes": ["Datum"], "type": "B_PLUS_TREE", "clustered": false, "treeHeight": 2}
+        ]
+      },
+      {
+        "name": "Fudbaler",
+        "rowCount": 50,
+        "blockCount": 2,
+        "rowsPerBlock": 40,
+        "attributes": [
+          {"name": "IDFud", "type": "INT", "unique": true, "distinctValues": 50},
+          {"name": "Ime", "type": "STRING", "unique": true, "distinctValues": 50}
+        ],
+        "indexes": [
+          {"name": "idx_fudbaler_ime_hash", "attributes": ["Ime"], "type": "HASH", "clustered": false}
+        ]
+      },
+      {
+        "name": "Igrao",
+        "rowCount": 20000,
+        "blockCount": 500,
+        "rowsPerBlock": 40,
+        "attributes": [
+          {"name": "IDUta", "type": "INT", "unique": false, "distinctValues": 10000},
+          {"name": "IDFud", "type": "INT", "unique": false, "distinctValues": 50},
+          {"name": "Pozicija", "type": "STRING", "unique": false, "distinctValues": 4}
+        ],
+        "indexes": [
+          {"name": "idx_igrao_iduta_idfud", "attributes": ["IDUta", "IDFud"], "type": "B_PLUS_TREE", "clustered": true, "treeHeight": 2},
+          {"name": "idx_igrao_pozicija", "attributes": ["Pozicija"], "type": "B_PLUS_TREE", "clustered": false, "treeHeight": 2}
+        ]
+      }
+    ]
+  }
+}

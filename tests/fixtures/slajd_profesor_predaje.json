@@ -1,0 +1,59 @@
+{
+  "bufferBlocks": 52,
+  "schema": {
+    "tables": [
+      {
+        "name": "Katedra",
+        "rowCount": 50,
+        "blockCount": 5,
+        "rowsPerBlock": 10,
+        "attributes": [
+          {"name": "SifD", "type": "STRING", "unique": true, "distinctValues": 50},
+          {"name": "Naziv", "type": "STRING", "unique": true, "distinctValues": 50}
+        ],
+        "indexes": []
+      },
+      {
+        "name": "Predmet",
+        "rowCount": 80,
+        "blockCount": 8,
+        "rowsPerBlock": 10,
+        "attributes": [
+          {"name": "SifP", "type": "STRING", "unique": true, "distinctValues": 80},
+          {"name": "Naziv", "type": "STRING", "unique": true, "distinctValues": 80}
+        ],
+        "indexes": []
+      },
+      {
+        "name": "Profesor",
+        "rowCount": 1000,
+        "blockCount": 200,
+        "rowsPerBlock": 5,
+        "attributes": [
+          {"name": "SifP", "type": "STRING", "unique": true, "distinctValues": 1000},
+          {"name": "Ime", "type": "STRING", "unique": false, "distinctValues": 900},
+          {"name": "SifD", "type": "STRING", "unique": false, "distinctValues": 50}
+        ],
+        "indexes": [
+          {"name": "idx_profesor_sifp_hash", "attributes": ["SifP"], "type": "HASH", "clustered": false},
+          {"name": "idx_profesor_sifd", "attributes": ["SifD"], "type": "B_PLUS_TREE", "clustered": true, "treeHeight": 2}
+        ]
+      },
+      {
+        "name": "Predaje",
+        "rowCount": 10000,
+        "blockCount": 1000,
+        "rowsPerBlock": 10,
+        "attributes": [
+          {"name": "SifPro", "type": "STRING", "unique": false, "distinctValues": 1000},
+          {"name": "SifPre", "type": "STRING", "unique": false, "distinctValues": 80},
+          {"name": "Semestar", "type": "STRING", "unique": false, "distinctValues": 4}
+        ],
+        "indexes": [
+          {"name": "idx_predaje_semestar", "attributes": ["Semestar"], "type": "B_PLUS_TREE", "clustered": false, "treeHeight": 2},
+          {"name": "idx_predaje_sifpro_hash", "attributes": ["SifPro"], "type": "HASH", "clustered": false}
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "bufferBlocks": 30,
+  "schema": {
+    "tables": [
+      {
+        "name": "Zaposleni",
+        "rowCount": 10000,
+        "blockCount": 250,
+        "rowsPerBlock": 40,
+        "attributes": [
+          {"name": "IDZap", "type": "INT", "unique": true, "distinctValues": 10000},
+          {"name": "Ime", "type": "STRING", "unique": false, "distinctValues": 1000},
+          {"name": "IDOde", "type": "INT", "unique": false, "distinctValues": 50}
+        ],
+        "indexes": [
+          {"name": "idx_zaposleni_ime_hash", "attributes": ["Ime"], "type": "HASH", "clustered": false}
+        ]
+      },
+      {
+        "name": "Radi",
+        "rowCount": 20000,
+        "blockCount": 500,
+        "rowsPerBlock": 40,
+        "attributes": [
+          {"name": "IDZap", "type": "INT", "unique": false, "distinctValues": 10000},
+          {"name": "IDPro", "type": "INT", "unique": false, "distinctValues": 500},
+          {"name": "Procenat", "type": "INT", "unique": false, "distinctValues": 100, "minValue": 0, "maxValue": 100}
+        ],
+        "indexes": [
+          {"name": "idx_radi_idzap_hash", "attributes": ["IDZap"], "type": "HASH", "clustered": false},
+          {"name": "idx_radi_procenat", "attributes": ["Procenat"], "type": "B_PLUS_TREE", "clustered": true, "treeHeight": 2}
+        ]
+      }
+    ]
+  }
+}

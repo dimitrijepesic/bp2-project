@@ -1,0 +1,46 @@
+{
+  "bufferBlocks": 30,
+  "schema": {
+    "tables": [
+      {
+        "name": "Osoba",
+        "rowCount": 10000,
+        "blockCount": 250,
+        "rowsPerBlock": 40,
+        "attributes": [
+          {"name": "IdOso", "type": "INT", "unique": true, "distinctValues": 10000},
+          {"name": "Ime", "type": "STRING", "unique": false, "distinctValues": 2000}
+        ],
+        "indexes": [
+          {"name": "idx_osoba_ime", "attributes": ["Ime"], "type": "B_PLUS_TREE", "clustered": false, "treeHeight": 3}
+        ]
+      },
+      {
+        "name": "Koristi",
+        "rowCount": 20000,
+        "blockCount": 500,
+        "rowsPerBlock": 40,
+        "attributes": [
+          {"name": "IdOso", "type": "INT", "unique": false, "distinctValues": 10000},
+          {"name": "IdAut", "type": "INT", "unique": false, "distinctValues": 50}
+        ],
+        "indexes": [
+          {"name": "idx_koristi_oso_aut", "attributes": ["IdOso", "IdAut"], "type": "B_PLUS_TREE", "clustered": true, "treeHeight": 2}
+        ]
+      },
+      {
+        "name": "Automobil",
+        "rowCount": 50,
+        "blockCount": 2,
+        "rowsPerBlock": 40,
+        "attributes": [
+          {"name": "IdAut", "type": "INT", "unique": true, "distinctValues": 50},
+          {"name": "Tablica", "type": "STRING", "unique": true, "distinctValues": 50}
+        ],
+        "indexes": [
+          {"name": "idx_automobil_tablica_hash", "attributes": ["Tablica"], "type": "HASH", "clustered": false}
+        ]
+      }
+    ]
+  }
+}
