@@ -1,0 +1,13 @@
+[project]
+name = "bp2-query-optimizer"
+version = "1.0.0"
+description = "Mini optimizator SQL upita za predmet BP2 - bira najbolji plan evaluacije sa cenom u blok transferima"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
