@@ -1,5 +1,5 @@
 [project]
-name = "bp2-query-optimizer"
+name = "mini-sql-query-optimizer"
 version = "1.0.0"
 description = "Mini optimizator SQL upita - bira najbolji plan evaluacije sa cenom u blok transferima"
 readme = "README.md"
