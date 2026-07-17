@@ -1,0 +1,49 @@
+{
+  "bufferBlocks": 10,
+  "schema": {
+    "tables": [
+      {
+        "name": "A",
+        "rowCount": 100,
+        "blockCount": 10,
+        "rowsPerBlock": 10,
+        "attributes": [
+          {"name": "x", "type": "INT", "unique": false, "distinctValues": 10},
+          {"name": "y", "type": "INT", "unique": false, "distinctValues": 20}
+        ],
+        "indexes": []
+      },
+      {
+        "name": "B",
+        "rowCount": 100,
+        "blockCount": 10,
+        "rowsPerBlock": 10,
+        "attributes": [
+          {"name": "x", "type": "INT", "unique": false, "distinctValues": 10},
+          {"name": "y", "type": "INT", "unique": false, "distinctValues": 20}
+        ],
+        "indexes": []
+      },
+      {
+        "name": "C",
+        "rowCount": 100,
+        "blockCount": 10,
+        "rowsPerBlock": 10,
+        "attributes": [
+          {"name": "x", "type": "INT", "unique": false, "distinctValues": 10}
+        ],
+        "indexes": []
+      },
+      {
+        "name": "D",
+        "rowCount": 100,
+        "blockCount": 10,
+        "rowsPerBlock": 10,
+        "attributes": [
+          {"name": "x", "type": "INT", "unique": false, "distinctValues": 10}
+        ],
+        "indexes": []
+      }
+    ]
+  }
+}
