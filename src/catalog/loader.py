@@ -2,7 +2,8 @@ import math
 import json
 from src.catalog.model import Attribute, Index, Table, Catalog, CatalogError
 
-ATTR_KEYS = {"name", "type", "unique", "distinctValues"} # enum za sve atribute dataklase Attribute
+ATTR_KEYS = {"name", "type", "unique", "distinctValues", "minValue", "maxValue"} # enum za sve atribute dataklase Attribute
+NUMERIC_ATTR_TYPES = {"INT", "DOUBLE"} # min/max statistike imaju smisla samo za numericke tipove
 INDEX_KEYS = {"name", "attributes", "type", "clustered", "treeHeight"} # enum za sve atribute dataklase Index
 KIND_MAP = {"B_PLUS_TREE": "btree", "HASH": "hash"} # mapiranje json vrednosti
 TABLE_KEYS = {"name", "rowCount", "blockCount", "rowsPerBlock", "attributes", "indexes"} # atributi u tabeli
@@ -18,10 +19,21 @@ def require(d: dict, key: str, expected_type: type, ctx: str):
         raise CatalogError(f"{ctx}: field {key!r} must be int, got bool")
     if not isinstance(value, expected_type):
         raise CatalogError(
-            f"{ctx}: field {key!r} must be {expected_type.__name__},"
+            f"{ctx}: field {key!r} must be {expected_type.__name__}, "
             f"got {type(value).__name__}"
         )
     return value
+
+
+# json ime tipa za poruke, None je "null" (json termin) a ne "NoneType"
+def json_type_name(value) -> str:
+    return "null" if value is None else type(value).__name__
+
+
+# element liste mora biti json objekat, CatalogError umesto sirovog TypeError
+def require_object(value, ctx: str):
+    if not isinstance(value, dict):
+        raise CatalogError(f"{ctx}: expected object, got {json_type_name(value)}")
 
 def check_unknown_keys(d: dict, allowed: set, ctx: str):
     unknown = set(d) - allowed
@@ -33,20 +45,48 @@ def positive(value: int, name: str, ctx: str) -> int:
         raise CatalogError(f"{ctx}: {name} must be positive, got {value}")
     return value
 
-def parse_attribute(d: dict, ctx: str) -> Attribute:
+def numeric_stat(d: dict, key: str, ctx: str) -> "int | float":
+    value = d[key]
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise CatalogError(f"{ctx}: field {key!r} must be a number, got {type(value).__name__}")
+    return value
+
+def parse_attribute(d, ctx: str, pos: int) -> Attribute:
+    require_object(d, f"{ctx}.attributes[{pos}]")
     check_unknown_keys(d, ATTR_KEYS, ctx) # proveri da nema unknown reci
     name = require(d, "name", str, ctx)
     ctx = f"{ctx}, attribute {name!r}"
     distinct = require(d, "distinctValues", int, ctx)
     positive(distinct, "distinctValues", ctx)
+    attr_type = require(d, "type", str, ctx)
+
+    # minValue/maxValue: opciono, ali oba zajedno, samo za numericke tipove, min < max
+    min_value = None
+    max_value = None
+    if "minValue" in d or "maxValue" in d:
+        if "minValue" not in d or "maxValue" not in d:
+            raise CatalogError(f"{ctx}: minValue and maxValue must be given together")
+        if attr_type not in NUMERIC_ATTR_TYPES:
+            raise CatalogError(
+                f"{ctx}: minValue/maxValue only allowed for numeric types "
+                f"{sorted(NUMERIC_ATTR_TYPES)}, attribute type is {attr_type!r}"
+            )
+        min_value = numeric_stat(d, "minValue", ctx)
+        max_value = numeric_stat(d, "maxValue", ctx)
+        if min_value >= max_value:
+            raise CatalogError(f"{ctx}: minValue must be < maxValue ({min_value} vs {max_value})")
+
     return Attribute(
         name=name,
-        type=require(d, "type", str, ctx),
+        type=attr_type,
         unique=require(d, "unique", bool, ctx),
         distinct_values=distinct,
+        min_value=min_value,
+        max_value=max_value,
     )
 
-def parse_index(d: dict, ctx: str) -> Index:
+def parse_index(d, ctx: str, pos: int) -> Index:
+    require_object(d, f"{ctx}.indexes[{pos}]")
     check_unknown_keys(d, INDEX_KEYS, ctx)
     name = require(d, "name", str, ctx)
     ctx = f"{ctx}, index {name!r}"
@@ -77,13 +117,14 @@ def parse_index(d: dict, ctx: str) -> Index:
 
     return Index(
         name=name,
-        attributes=tuple(raw_attrs),  # redosled OCUVAN — bitno za prefix matching
+        attributes=tuple(raw_attrs),  # redosled ocuvan, bitan za prefix matching
         kind=kind,
         clustered=clustered,
         tree_height=treeh,
     )
 
-def parse_table(d: dict, ctx: str) -> Table:
+def parse_table(d, ctx: str, pos: int) -> Table:
+    require_object(d, f"{ctx}.schema.tables[{pos}]")
     check_unknown_keys(d, TABLE_KEYS, ctx)
     name = require(d, "name", str, ctx)
     ctx = f"{ctx}, table {name!r}"
@@ -92,12 +133,12 @@ def parse_table(d: dict, ctx: str) -> Table:
     raw_attrs = require(d, "attributes", list, ctx)
     if not raw_attrs:
         raise CatalogError(f"{ctx}: table has empty attributes list")
-    attributes = tuple(parse_attribute(a, ctx) for a in raw_attrs)
+    attributes = tuple(parse_attribute(a, ctx, i) for i, a in enumerate(raw_attrs))
 
     attr_names = [a.name for a in attributes]
     if len(attr_names) != len(set(attr_names)):  # duplirani nazivi atributa
         dupes = sorted({n for n in attr_names if attr_names.count(n) > 1})
-        raise CatalogError(f"{ctx}: duplicate attribute name(s):{dupes}")
+        raise CatalogError(f"{ctx}: duplicate attribute name(s): {dupes}")
 
     # statistike
     n_rows = positive(require(d, "rowCount", int, ctx), "rowCount", ctx)
@@ -120,7 +161,7 @@ def parse_table(d: dict, ctx: str) -> Table:
             )
 
     raw_indexes = require(d, "indexes", list, ctx)
-    indexes = tuple(parse_index(i, ctx) for i in raw_indexes)
+    indexes = tuple(parse_index(idx, ctx, i) for i, idx in enumerate(raw_indexes))
 
     # validacija svaki atribut indeksa u tabeli
     attr_set = set(attr_names)
@@ -173,7 +214,7 @@ def load_catalog(path: str) -> Catalog:
     raw_tables = require(schema, "tables", list, "catalog.schema")
     if not raw_tables:
         raise CatalogError("catalog.schema: no tables defined")
-    tables = tuple(parse_table(t, "catalog") for t in raw_tables)
+    tables = tuple(parse_table(t, "catalog", i) for i, t in enumerate(raw_tables))
 
     # validacija 3: duplirani nazivi tabela
     table_names = [t.name for t in tables]

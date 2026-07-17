@@ -10,6 +10,10 @@ class Attribute:
     type: str
     unique: bool
     distinct_values: int
+    # opcione min/max statistike (samo numericki tipovi), za interpolacionu formulu
+    # selektivnosti opsega umesto podrazumevanog 1/2; ili oba ili nijedno
+    min_value: "int | float | None" = None
+    max_value: "int | float | None" = None
 
 @dataclass(frozen=True)
 class Index:
